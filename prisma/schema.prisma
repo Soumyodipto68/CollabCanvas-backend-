@@ -1,0 +1,27 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  password  String
+  boards    Board[]  @relation("UserBoards")
+  createdAt DateTime @default(now())
+}
+
+model Board {
+  id        String   @id @default(uuid())
+  title     String   @default("Untitled Board")
+  ownerId   String
+  owner     User     @relation("UserBoards", fields: [ownerId], references: [id], onDelete: Cascade)
+  elements  Json     @default("[]") // Stores path/shape arrays for persistence
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

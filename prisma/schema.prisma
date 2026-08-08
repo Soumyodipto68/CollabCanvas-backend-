@@ -1,6 +1,6 @@
+// server_side/prisma/schema.prisma
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -21,7 +21,7 @@ model Board {
   title     String   @default("Untitled Board")
   ownerId   String
   owner     User     @relation("UserBoards", fields: [ownerId], references: [id], onDelete: Cascade)
-  elements  Json     @default("[]") // Stores path/shape arrays for persistence
+  elements  Json     @default("[]")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

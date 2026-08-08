@@ -3,30 +3,62 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+const session = require("express-session");
+const passport = require("./config/passport");
 const prisma = require("./config/db");
-const registerBoardSocket = require("./socket/boardSocket");
-const { configDotenv } = require("dotenv");
+
+// Routes
+const authRoutes = require("./routes/authRoutes");
+const boardRoutes = require("./routes/boardRoutes");
 
 const app = express();
-app.use(cors());
+
+// CORS Configuration - Allows Credentials for Cookies/Sessions
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true,
+  })
+);
+
 app.use(express.json());
-configDotenv();
+
+// Express Session Middleware
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "super_secret_session_key",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: false, // Set to true if serving over HTTPS
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    },
+  })
+);
+
+// Initialize Passport Session Middleware
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Mount Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/boards", boardRoutes);
 
 const server = http.createServer(app);
 
-// Initialize Socket.IO with CORS enabled
+// Socket.IO Setup
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173", // Your Vite dev server URL
-    methods: ["GET", "POST"],
+    origin: "http://localhost:5173",
+    credentials: true,
   },
 });
 
-// Register socket handlers
-registerBoardSocket(io);
+require("./socket/boardSocket")(io);
 
-const PORT = process.env.PORT || 3000;
-// Test DB Connection before starting HTTP server
+const PORT = process.env.PORT || 5000;
+
 async function main() {
   try {
     await prisma.$connect();
@@ -36,7 +68,7 @@ async function main() {
       console.log(`Server running on http://localhost:${PORT}`);
     });
   } catch (error) {
-    console.error("Failed to connect to the database:", error);
+    console.error("Failed to connect to DB:", error);
     process.exit(1);
   }
 }

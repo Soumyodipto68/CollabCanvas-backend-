@@ -7,20 +7,28 @@ const session = require("express-session");
 const passport = require("./config/passport");
 const prisma = require("./config/db");
 
-// Routes
+// Import Route Handlers
 const authRoutes = require("./routes/authRoutes");
 const boardRoutes = require("./routes/boardRoutes");
 
-const app = express();
+// Import Socket Handler
+const registerBoardSocket = require("./socket/boardSocket");
 
-// CORS Configuration - Allows Credentials for Cookies/Sessions
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// Trust reverse proxy if deployed behind Nginx / Render / Heroku
+app.set("trust proxy", 1);
+
+// CORS Configuration - Allows Credentials for Session Cookies
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: "http://localhost:5173", // Vite dev server port
     credentials: true,
   })
 );
 
+// Express JSON Body Parser
 app.use(express.json());
 
 // Express Session Middleware
@@ -30,7 +38,7 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: false, // Set to true if serving over HTTPS
+      secure: false, // Set to true in production with HTTPS
       httpOnly: true,
       sameSite: "lax",
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
@@ -42,13 +50,14 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Mount Routes
+// Mount REST API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/boards", boardRoutes);
 
+// Create Native HTTP Server wrapping Express
 const server = http.createServer(app);
 
-// Socket.IO Setup
+// Initialize Socket.IO with CORS settings matching Express
 const io = new Server(server, {
   cors: {
     origin: "http://localhost:5173",
@@ -56,10 +65,17 @@ const io = new Server(server, {
   },
 });
 
-require("./socket/boardSocket")(io);
+// Attach Socket.IO Board Event Handlers
+registerBoardSocket(io);
 
-const PORT = process.env.PORT || 5000;
+// Graceful Shutdown Handler for Prisma
+process.on("SIGINT", async () => {
+  await prisma.$disconnect();
+  console.log("\nPrisma client disconnected. Server shutting down.");
+  process.exit(0);
+});
 
+// Database Connection & Server Initialization
 async function main() {
   try {
     await prisma.$connect();

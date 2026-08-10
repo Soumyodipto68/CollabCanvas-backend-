@@ -1,146 +1,159 @@
-// server_side/controllers/boardController.js
-const prisma = require("../config/db");
+const prisma = require("../config/db"); // Your Prisma Client instance
+const { redisClient } = require("../config/redis"); // Your Redis client instance
+const { pushStrokeToBuffer } = require("../services/boardBuffer");
 
 /**
- * 1. Create a new Whiteboard
- * Route: POST /api/boards
- * Protected: Yes (Passport Session)
+ * POST /api/boards
+ * Create a new board for the logged-in user
  */
-exports.createBoard = async (req, res) => {
-  try {
-    const { title } = req.body;
-    const ownerId = req.user.id; // Set by Passport deserializer
+const createBoard = async (req, res) => {
+  const { title } = req.body;
+  const userId = req.user?.id || req.user?._id; // Extracted from Passport session
 
-    const board = await prisma.board.create({
+  try {
+    const newBoard = await prisma.board.create({
       data: {
         title: title || "Untitled Board",
-        ownerId,
-        elements: [], // Initializes with an empty canvas stroke/element list
+        userId: userId, // Ensure your Prisma schema links board to user
+        data: [], // Initialize with empty stroke array
       },
     });
 
-    res.status(201).json({
-      message: "Board created successfully",
-      board,
-    });
+    return res.status(201).json(newBoard);
   } catch (error) {
-    console.error("Create Board Error:", error);
-    res.status(500).json({ message: "Failed to create board" });
+    console.error("Error creating board:", error);
+    return res.status(500).json({ message: "Failed to create board" });
   }
 };
 
 /**
- * 2. Fetch all Boards belonging to the current user
- * Route: GET /api/boards
- * Protected: Yes
+ * GET /api/boards
+ * Fetch all boards created by the logged-in user
  */
-exports.getUserBoards = async (req, res) => {
-  try {
-    const ownerId = req.user.id;
+const getUserBoards = async (req, res) => {
+  const userId = req.user?.id || req.user?._id;
 
+  try {
     const boards = await prisma.board.findMany({
-      where: { ownerId },
+      where: { userId },
       orderBy: { updatedAt: "desc" },
       select: {
         id: true,
+        boardId: true,
         title: true,
         createdAt: true,
         updatedAt: true,
+        // Exclude 'data' array here to keep list payload light
       },
     });
 
-    res.status(200).json(boards);
+    return res.status(200).json(boards);
   } catch (error) {
-    console.error("Get User Boards Error:", error);
-    res.status(500).json({ message: "Failed to retrieve boards" });
+    console.error("Error fetching user boards:", error);
+    return res.status(500).json({ message: "Failed to fetch user boards" });
   }
 };
 
 /**
- * 3. Fetch a single Board by ID
- * Route: GET /api/boards/:id
- * Protected: Optional / Public for shared room links
+ * GET /api/boards/:id
+ * Fetch a single board by ID (Merges PostgreSQL DB + pending Redis buffer)
  */
-exports.getBoardById = async (req, res) => {
-  try {
-    const { id } = req.params;
+const getBoardById = async (req, res) => {
+  const { id: boardId } = req.params;
 
+  try {
+    // 1. Fetch persistent board data from Postgres via Prisma
     const board = await prisma.board.findUnique({
-      where: { id },
-      include: {
-        owner: {
-          select: { id: true, name: true, email: true },
-        },
-      },
+      where: { boardId },
     });
 
     if (!board) {
       return res.status(404).json({ message: "Board not found" });
     }
 
-    res.status(200).json(board);
+    const persistedStrokes = Array.isArray(board.data) ? board.data : [];
+
+    // 2. Read any pending strokes sitting in the Redis buffer (not yet flushed to Postgres)
+    const rawBuffer = await redisClient.lRange(
+      `board:${boardId}:pending_strokes`,
+      0,
+      -1
+    );
+    const bufferedStrokes = rawBuffer.map((stroke) => JSON.parse(stroke));
+
+    // 3. Return board metadata and merged stroke array
+    return res.status(200).json({
+      boardId: board.boardId,
+      title: board.title,
+      data: [...persistedStrokes, ...bufferedStrokes],
+      createdAt: board.createdAt,
+      updatedAt: board.updatedAt,
+    });
   } catch (error) {
-    console.error("Get Board By ID Error:", error);
-    res.status(500).json({ message: "Failed to retrieve board" });
+    console.error("Error fetching board:", error);
+    return res.status(500).json({ message: "Server error while fetching board" });
   }
 };
 
 /**
- * 4. Save / Update Canvas Elements or Title
- * Route: PUT /api/boards/:id
- * Protected: Yes
+ * PUT /api/boards/:id
+ * Save or update canvas elements / board title
  */
-exports.saveBoardElements = async (req, res) => {
+const saveBoardElements = async (req, res) => {
+  const { id: boardId } = req.params;
+  const { title, data } = req.body;
+
   try {
-    const { id } = req.params;
-    const { elements, title } = req.body;
+    // Update board title if provided
+    if (title) {
+      await prisma.board.update({
+        where: { boardId },
+        data: { title },
+      });
+    }
 
-    const updateData = {};
-    if (elements !== undefined) updateData.elements = elements;
-    if (title !== undefined) updateData.title = title;
+    // Queue drawing strokes in Redis buffer
+    if (Array.isArray(data) && data.length > 0) {
+      for (const stroke of data) {
+        await pushStrokeToBuffer(boardId, stroke);
+      }
+    }
 
-    const board = await prisma.board.update({
-      where: { id },
-      data: updateData,
-    });
-
-    res.status(200).json({
-      message: "Board updated successfully",
-      board,
-    });
+    return res.status(200).json({ message: "Board changes queued successfully" });
   } catch (error) {
-    console.error("Save Board Elements Error:", error);
-    res.status(500).json({ message: "Failed to save board" });
+    console.error("Error saving board elements:", error);
+    return res.status(500).json({ message: "Failed to save board elements" });
   }
 };
 
 /**
- * 5. Delete a Board
- * Route: DELETE /api/boards/:id
- * Protected: Yes
+ * DELETE /api/boards/:id
+ * Delete a board and clean up its Redis buffer
  */
-exports.deleteBoard = async (req, res) => {
+const deleteBoard = async (req, res) => {
+  const { id: boardId } = req.params;
+
   try {
-    const { id } = req.params;
-    const ownerId = req.user.id;
+    // 1. Delete from PostgreSQL
+    await prisma.board.delete({
+      where: { boardId },
+    });
 
-    // Check if board exists
-    const board = await prisma.board.findUnique({ where: { id } });
+    // 2. Remove any leftover Redis pending strokes buffer
+    await redisClient.del(`board:${boardId}:pending_strokes`);
 
-    if (!board) {
-      return res.status(404).json({ message: "Board not found" });
-    }
-
-    // Ensure the requester owns the board
-    if (board.ownerId !== ownerId) {
-      return res.status(403).json({ message: "Not authorized to delete this board" });
-    }
-
-    await prisma.board.delete({ where: { id } });
-
-    res.status(200).json({ message: "Board deleted successfully" });
+    return res.status(200).json({ message: "Board deleted successfully" });
   } catch (error) {
-    console.error("Delete Board Error:", error);
-    res.status(500).json({ message: "Failed to delete board" });
+    console.error("Error deleting board:", error);
+    return res.status(500).json({ message: "Failed to delete board" });
   }
+};
+
+// Explicitly export ALL five handlers expected by boardRoutes.js
+module.exports = {
+  createBoard,
+  getUserBoards,
+  getBoardById,
+  saveBoardElements,
+  deleteBoard,
 };

@@ -1,3 +1,4 @@
+// server_side/server.js
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -5,8 +6,6 @@ const cors = require("cors");
 const session = require("express-session");
 const passport = require("./config/passport");
 const prisma = require("./config/db");
-const { connectRedis, redisClient } = require("./config/redis");
-const { flushRedisToDatabase } = require("./services/boardBuffer");
 
 // Import Route Handlers
 const authRoutes = require("./routes/authRoutes");
@@ -29,9 +28,8 @@ app.use(
   })
 );
 
-// Express JSON Body Parser (increased limit for large payloads)
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+// Express JSON Body Parser
+app.use(express.json());
 
 // Express Session Middleware
 app.use(
@@ -70,68 +68,24 @@ const io = new Server(server, {
 // Attach Socket.IO Board Event Handlers
 registerBoardSocket(io);
 
-// Background timer reference for clean teardown
-let flushIntervalId = null;
-
-// Graceful Shutdown Function
-async function gracefulShutdown(signal) {
-  console.log(`\nReceived ${signal}. Starting graceful shutdown...`);
-
-  // 1. Stop accepting new flush intervals
-  if (flushIntervalId) {
-    clearInterval(flushIntervalId);
-  }
-
-  // 2. Perform a final flush of all un-saved Redis strokes to PostgreSQL
-  console.log("Flushing remaining Redis buffers to PostgreSQL...");
-  try {
-    await flushRedisToDatabase();
-    console.log("Redis buffers successfully flushed.");
-  } catch (err) {
-    console.error("Error flushing Redis during shutdown:", err);
-  }
-
-  // 3. Disconnect Redis client
-  if (redisClient && redisClient.isOpen) {
-    await redisClient.quit();
-    console.log("Redis client disconnected.");
-  }
-
-  // 4. Disconnect Prisma client
+// Graceful Shutdown Handler for Prisma
+process.on("SIGINT", async () => {
   await prisma.$disconnect();
-  console.log("Prisma client disconnected.");
-
-  // 5. Close HTTP server and exit
-  server.close(() => {
-    console.log("HTTP server closed. Exiting process.");
-    process.exit(0);
-  });
-}
-
-// Intercept SIGINT (Ctrl+C) and SIGTERM (kill / container termination)
-process.on("SIGINT", () => gracefulShutdown("SIGINT"));
-process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  console.log("\nPrisma client disconnected. Server shutting down.");
+  process.exit(0);
+});
 
 // Database Connection & Server Initialization
 async function main() {
   try {
-    // Connect to PostgreSQL via Prisma
     await prisma.$connect();
     console.log("Database connected successfully via Prisma");
-
-    // Connect to Redis
-    await connectRedis();
-
-    // Start background flush job (runs every 10 seconds)
-    flushIntervalId = setInterval(() => {
-      flushRedisToDatabase();
-    }, 10000);
 
     server.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });
   } catch (error) {
-    console.error("Failed to initialize server dependencies:", error);
+    console.error("Failed to connect to DB:", error);
     process.exit(1);
   }
 }

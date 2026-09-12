@@ -20,8 +20,8 @@ exports.createBoard = async (req, res) => {
     });
 
     res.status(201).json({
-      message: "Board created successfully",
-      board,
+      ...board,
+      data: board.elements ?? [],
     });
   } catch (error) {
     console.error("Create Board Error:", error);
@@ -78,7 +78,11 @@ exports.getBoardById = async (req, res) => {
       return res.status(404).json({ message: "Board not found" });
     }
 
-    res.status(200).json(board);
+    res.status(200).json({
+      ...board,
+      elements: board.elements ?? [],
+      data: board.elements ?? [],
+    });
   } catch (error) {
     console.error("Get Board By ID Error:", error);
     res.status(500).json({ message: "Failed to retrieve board" });
@@ -93,10 +97,11 @@ exports.getBoardById = async (req, res) => {
 exports.saveBoardElements = async (req, res) => {
   try {
     const { id } = req.params;
-    const { elements, title } = req.body;
+    const { elements, data, title } = req.body;
+    const incomingElements = elements ?? data ?? [];
 
     const updateData = {};
-    if (elements !== undefined) updateData.elements = elements;
+    if (elements !== undefined || data !== undefined) updateData.elements = incomingElements;
     if (title !== undefined) updateData.title = title;
 
     const board = await prisma.board.update({
@@ -106,7 +111,9 @@ exports.saveBoardElements = async (req, res) => {
 
     res.status(200).json({
       message: "Board updated successfully",
-      board,
+      ...board,
+      elements: board.elements ?? [],
+      data: board.elements ?? [],
     });
   } catch (error) {
     console.error("Save Board Elements Error:", error);

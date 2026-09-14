@@ -4,6 +4,7 @@ const router = express.Router();
 const {
   createBoard,
   getUserBoards,
+  getSharedBoards,
   getBoardById,
   saveBoardElements,
   deleteBoard,
@@ -24,6 +25,9 @@ router.post("/", isAuthenticated, createBoard);
 
 // Get all boards belonging to the logged-in user (Protected)
 router.get("/", isAuthenticated, getUserBoards);
+
+// Get boards explicitly shared with the logged-in user (Protected)
+router.get("/shared", isAuthenticated, getSharedBoards);
 
 // Get a single board by ID (Public so shared room links work, or add isAuthenticated if private)
 router.get("/:id", getBoardById);

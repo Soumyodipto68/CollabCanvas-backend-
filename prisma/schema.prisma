@@ -8,20 +8,33 @@ generator client {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String
-  password  String
-  boards    Board[]  @relation("UserBoards")
-  createdAt DateTime @default(now())
+  id           String       @id @default(uuid())
+  email        String       @unique
+  name         String
+  password     String
+  boards       Board[]      @relation("UserBoards")
+  sharedBoards BoardShare[] @relation("SharedToUser")
+  createdAt    DateTime     @default(now())
 }
 
 model Board {
-  id        String   @id @default(uuid())
-  title     String   @default("Untitled Board")
+  id        String       @id @default(uuid())
+  title     String       @default("Untitled Board")
   ownerId   String
-  owner     User     @relation("UserBoards", fields: [ownerId], references: [id], onDelete: Cascade)
-  elements  Json     @default("[]")
+  owner     User         @relation("UserBoards", fields: [ownerId], references: [id], onDelete: Cascade)
+  elements  Json         @default("[]")
+  shares    BoardShare[] @relation("SharedBoard")
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+}
+
+model BoardShare {
+  id        String   @id @default(uuid())
+  boardId   String
+  board     Board    @relation("SharedBoard", fields: [boardId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("SharedToUser", fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  @@unique([boardId, userId])
 }

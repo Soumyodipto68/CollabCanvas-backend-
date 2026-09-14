@@ -56,6 +56,44 @@ exports.getUserBoards = async (req, res) => {
   }
 };
 
+exports.getSharedBoards = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const boardShares = await prisma.boardShare.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        board: {
+          select: {
+            id: true,
+            title: true,
+            createdAt: true,
+            updatedAt: true,
+            owner: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const boards = boardShares.map(({ board }) => ({
+      ...board,
+      ownerName: board.owner?.name,
+    }));
+
+    res.status(200).json(boards);
+  } catch (error) {
+    console.error("Get Shared Boards Error:", error);
+    res.status(500).json({ message: "Failed to retrieve shared boards" });
+  }
+};
+
 /**
  * 3. Fetch a single Board by ID
  * Route: GET /api/boards/:id

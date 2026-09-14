@@ -94,6 +94,63 @@ exports.getSharedBoards = async (req, res) => {
   }
 };
 
+exports.shareBoardWithUser = async (req, res) => {
+  try {
+    const { id: boardId } = req.params;
+    const { email } = req.body;
+    const currentUserId = req.user.id;
+
+    if (!email || !email.trim()) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const board = await prisma.board.findUnique({ where: { id: boardId } });
+    if (!board) {
+      return res.status(404).json({ message: "Board not found" });
+    }
+
+    if (board.ownerId !== currentUserId) {
+      return res.status(403).json({ message: "You can only share boards you own" });
+    }
+
+    const targetUser = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found with that email" });
+    }
+
+    if (targetUser.id === currentUserId) {
+      return res.status(400).json({ message: "You cannot share a board with yourself" });
+    }
+
+    const share = await prisma.boardShare.upsert({
+      where: {
+        boardId_userId: {
+          boardId,
+          userId: targetUser.id,
+        },
+      },
+      update: {},
+      create: {
+        boardId,
+        userId: targetUser.id,
+      },
+    });
+
+    res.status(200).json({
+      message: "Board shared successfully",
+      share,
+      recipient: {
+        id: targetUser.id,
+        email: targetUser.email,
+        name: targetUser.name,
+      },
+    });
+  } catch (error) {
+    console.error("Share Board Error:", error);
+    res.status(500).json({ message: "Failed to share board" });
+  }
+};
+
 /**
  * 3. Fetch a single Board by ID
  * Route: GET /api/boards/:id

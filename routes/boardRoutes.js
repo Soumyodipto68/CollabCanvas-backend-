@@ -6,6 +6,7 @@ const {
   getUserBoards,
   getSharedBoards,
   getBoardById,
+  shareBoardWithUser,
   saveBoardElements,
   deleteBoard,
 } = require("../controllers/boardController");
@@ -28,6 +29,9 @@ router.get("/", isAuthenticated, getUserBoards);
 
 // Get boards explicitly shared with the logged-in user (Protected)
 router.get("/shared", isAuthenticated, getSharedBoards);
+
+// Share a board with a specific user by email (Protected)
+router.post("/:id/share", isAuthenticated, shareBoardWithUser);
 
 // Get a single board by ID (Public so shared room links work, or add isAuthenticated if private)
 router.get("/:id", getBoardById);

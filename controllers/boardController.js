@@ -62,10 +62,7 @@ exports.toggleBoardPin = async (req, res) => {
     const { id } = req.params;
     const board = await prisma.board.findUnique({ where: { id } });
 
-    if (!board) {
-      return res.status(404).json({ message: "Board not found" });
-    }
-
+    if (!board) return res.status(404).json({ message: "Board not found" });
     if (board.ownerId !== req.user.id) {
       return res.status(403).json({ message: "You can only pin boards you own" });
     }

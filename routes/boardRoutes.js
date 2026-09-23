@@ -31,7 +31,6 @@ router.get("/", isAuthenticated, getUserBoards);
 // Get boards explicitly shared with the logged-in user (Protected)
 router.get("/shared", isAuthenticated, getSharedBoards);
 
-// Pin or unpin a board owned by the logged-in user (Protected)
 router.patch("/:id/pin", isAuthenticated, toggleBoardPin);
 
 // Share a board with a specific user by email (Protected)

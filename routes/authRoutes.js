@@ -27,6 +27,31 @@ router.get("/current-user", (req, res) => {
   }
 });
 
+router.put("/profile", async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ message: "Not authenticated" });
+  }
+
+  const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+  if (!name) {
+    return res.status(400).json({ message: "Display name is required" });
+  }
+
+  try {
+    const prisma = require("../config/db");
+    const user = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { name },
+      select: { id: true, name: true, email: true },
+    });
+
+    res.status(200).json({ user });
+  } catch (error) {
+    console.error("Update profile error:", error);
+    res.status(500).json({ message: "Unable to update profile" });
+  }
+});
+
 // Logout Handler
 router.get("/logout", (req, res, next) => {
   req.logout((err) => {

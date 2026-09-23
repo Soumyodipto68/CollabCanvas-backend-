@@ -18,6 +18,8 @@ passport.use(
           return done(new Error("No email found from Google profile"), null);
         }
 
+        const avatar = profile.photos?.[0]?.value || null;
+
         // Check if user already exists
         let user = await prisma.user.findUnique({ where: { email } });
 
@@ -27,8 +29,14 @@ passport.use(
             data: {
               name: profile.displayName || "Google User",
               email: email,
+              avatar,
               password: "", // Google accounts don't store a local password
             },
+          });
+        } else if (avatar && user.avatar !== avatar) {
+          user = await prisma.user.update({
+            where: { id: user.id },
+            data: { avatar },
           });
         }
 
@@ -50,7 +58,7 @@ passport.deserializeUser(async (id, done) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, avatar: true },
     });
     done(null, user);
   } catch (error) {

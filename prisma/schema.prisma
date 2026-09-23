@@ -11,6 +11,7 @@ model User {
   id           String       @id @default(uuid())
   email        String       @unique
   name         String
+  avatar       String?
   password     String
   boards       Board[]      @relation("UserBoards")
   sharedBoards BoardShare[] @relation("SharedToUser")

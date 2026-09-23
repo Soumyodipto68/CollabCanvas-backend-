@@ -24,6 +24,7 @@ model Board {
   ownerId   String
   owner     User         @relation("UserBoards", fields: [ownerId], references: [id], onDelete: Cascade)
   elements  Json         @default("[]")
+  pinned    Boolean      @default(false)
   shares    BoardShare[] @relation("SharedBoard")
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt

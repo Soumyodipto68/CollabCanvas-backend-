@@ -40,10 +40,11 @@ exports.getUserBoards = async (req, res) => {
 
     const boards = await prisma.board.findMany({
       where: { ownerId },
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ pinned: "desc" }, { updatedAt: "desc" }],
       select: {
         id: true,
         title: true,
+        pinned: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -53,6 +54,32 @@ exports.getUserBoards = async (req, res) => {
   } catch (error) {
     console.error("Get User Boards Error:", error);
     res.status(500).json({ message: "Failed to retrieve boards" });
+  }
+};
+
+exports.toggleBoardPin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const board = await prisma.board.findUnique({ where: { id } });
+
+    if (!board) {
+      return res.status(404).json({ message: "Board not found" });
+    }
+
+    if (board.ownerId !== req.user.id) {
+      return res.status(403).json({ message: "You can only pin boards you own" });
+    }
+
+    const updatedBoard = await prisma.board.update({
+      where: { id },
+      data: { pinned: !board.pinned },
+      select: { id: true, pinned: true },
+    });
+
+    res.status(200).json(updatedBoard);
+  } catch (error) {
+    console.error("Toggle Board Pin Error:", error);
+    res.status(500).json({ message: "Failed to update board pin" });
   }
 };
 

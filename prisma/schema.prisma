@@ -21,6 +21,8 @@ model User {
 model Board {
   id        String       @id @default(uuid())
   title     String       @default("Untitled Board")
+  details   String?
+  priority  String       @default("medium")
   ownerId   String
   owner     User         @relation("UserBoards", fields: [ownerId], references: [id], onDelete: Cascade)
   elements  Json         @default("[]")

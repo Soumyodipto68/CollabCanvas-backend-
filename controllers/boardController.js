@@ -6,14 +6,23 @@ const prisma = require("../config/db");
  * Route: POST /api/boards
  * Protected: Yes (Passport Session)
  */
+const normalizeBoardPriority = (priority) => {
+  const normalizedPriority = String(priority || "medium").trim().toLowerCase();
+  return ["low", "medium", "high"].includes(normalizedPriority)
+    ? normalizedPriority
+    : "medium";
+};
+
 exports.createBoard = async (req, res) => {
   try {
-    const { title } = req.body;
+    const { title, details, priority } = req.body;
     const ownerId = req.user.id; // Set by Passport deserializer
 
     const board = await prisma.board.create({
       data: {
         title: title || "Untitled Board",
+        details: details?.trim() || null,
+        priority: normalizeBoardPriority(priority),
         ownerId,
         elements: [], // Initializes with an empty canvas stroke/element list
       },
@@ -44,6 +53,8 @@ exports.getUserBoards = async (req, res) => {
       select: {
         id: true,
         title: true,
+        details: true,
+        priority: true,
         pinned: true,
         createdAt: true,
         updatedAt: true,
@@ -92,6 +103,8 @@ exports.getSharedBoards = async (req, res) => {
           select: {
             id: true,
             title: true,
+            details: true,
+            priority: true,
             createdAt: true,
             updatedAt: true,
             owner: {
@@ -216,12 +229,14 @@ exports.getBoardById = async (req, res) => {
 exports.saveBoardElements = async (req, res) => {
   try {
     const { id } = req.params;
-    const { elements, data, title } = req.body;
+    const { elements, data, title, details, priority } = req.body;
     const incomingElements = elements ?? data ?? [];
 
     const updateData = {};
     if (elements !== undefined || data !== undefined) updateData.elements = incomingElements;
     if (title !== undefined) updateData.title = title;
+    if (details !== undefined) updateData.details = details?.trim() || null;
+    if (priority !== undefined) updateData.priority = normalizeBoardPriority(priority);
 
     const board = await prisma.board.update({
       where: { id },

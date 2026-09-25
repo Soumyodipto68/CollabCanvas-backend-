@@ -232,6 +232,19 @@ exports.saveBoardElements = async (req, res) => {
     const { elements, data, title, details, priority } = req.body;
     const incomingElements = elements ?? data ?? [];
 
+    const existingBoard = await prisma.board.findUnique({
+      where: { id },
+      select: { ownerId: true },
+    });
+
+    if (!existingBoard) {
+      return res.status(404).json({ message: "Board not found" });
+    }
+
+    if (priority !== undefined && existingBoard.ownerId !== req.user.id) {
+      return res.status(403).json({ message: "Only the board creator can change its priority" });
+    }
+
     const updateData = {};
     if (elements !== undefined || data !== undefined) updateData.elements = incomingElements;
     if (title !== undefined) updateData.title = title;

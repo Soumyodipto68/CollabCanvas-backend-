@@ -37,6 +37,16 @@ module.exports = function registerBoardSocket(io) {
       socket.to(boardId).emit("draw-stroke", stroke);
     });
 
+    socket.on("update-element", ({ boardId, element }) => {
+      if (!boardId || !element) return;
+      socket.to(boardId).emit("update-element", element);
+    });
+
+    socket.on("delete-element", ({ boardId, elementId }) => {
+      if (!boardId || !elementId) return;
+      socket.to(boardId).emit("delete-element", elementId);
+    });
+
     // 3. Broadcast Real-time Cursor Movement
     socket.on("mouse-move", ({ boardId, userId, name, x, y }) => {
       if (!boardId) return;

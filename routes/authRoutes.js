@@ -14,7 +14,7 @@ router.get(
   "/google/callback",
   passport.authenticate("google", {
     failureRedirect: "http://localhost:5173/login?error=auth_failed",
-    successRedirect: "http://localhost:5173/dashboard", // Frontend redirect after successful login
+    successRedirect: "http://localhost:5173/", // Frontend authenticated home after successful login
   })
 );
 
